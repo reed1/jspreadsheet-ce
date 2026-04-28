@@ -269,6 +269,58 @@ export const executeFormula = function (expression, x, y) {
     return execute(expression, x, y);
 };
 
+/**
+ * Count decimals in a numeric value without losing precision to scientific notation.
+ */
+const countDecimals = function (value) {
+    if (value == null || value === '') return 0;
+    let str = '' + value;
+    // Drop anything that isn't part of the number itself (currency, separators)
+    const m = str.match(/-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?/);
+    if (!m) return 0;
+    str = m[0];
+    if (/[eE]/.test(str)) {
+        const num = Number(str);
+        if (!Number.isFinite(num)) return 0;
+        // Use a precision big enough to recover the digits, then trim trailing zeros
+        str = num.toFixed(20).replace(/0+$/, '').replace(/\.$/, '');
+    }
+    const dot = str.indexOf('.');
+    return dot === -1 ? 0 : str.length - dot - 1;
+};
+
+/**
+ * Extend the decimal portion of a numeric mask so it can show every digit
+ * in `value`. Mask formatting (separators, currency, negative styling) is
+ * preserved; only the fractional placeholder count grows when needed.
+ */
+const expandMaskDecimals = function (opt, value) {
+    const decimals = countDecimals(value);
+    if (!decimals) return;
+
+    if (opt.mask) {
+        const sections = opt.mask.split(';');
+        for (let i = 0; i < sections.length; i++) {
+            const section = sections[i];
+            const dotPos = section.lastIndexOf('.');
+            if (dotPos === -1) continue;
+            const tail = section.substring(dotPos + 1).match(/^([0#]+)/);
+            if (!tail) continue;
+            const current = tail[1].length;
+            if (current >= decimals) continue;
+            const extra = '0'.repeat(decimals - current);
+            sections[i] = section.substring(0, dotPos + 1 + current) + extra + section.substring(dotPos + 1 + current);
+        }
+        opt.mask = sections.join(';');
+    } else if (opt.locale) {
+        if (!opt.options) opt.options = {};
+        const cap = Math.min(decimals, 20);
+        if (!(opt.options.maximumFractionDigits >= cap)) {
+            opt.options.maximumFractionDigits = cap;
+        }
+    }
+};
+
 export const parseValue = function (i, j, value, cell) {
     const obj = this;
 
@@ -282,6 +334,12 @@ export const parseValue = function (i, j, value, cell) {
         // Mask options
         let opt = null;
         if ((opt = getMask(options))) {
+            // Auto-expand the mask's decimal section to the value's actual
+            // precision. Default-on per Krisna fork; columns can opt out via
+            // `showAllDecimals: false` to get stock jspreadsheet trimming.
+            if (opt.autoExpand) {
+                expandMaskDecimals(opt, value);
+            }
             if (value && value == Number(value)) {
                 value = Number(value);
             }
@@ -732,6 +790,14 @@ export const getMask = function (o) {
             }
             opt.options = { decimal: o.decimal };
         }
+
+        // Krisna fork extension: by default the presentation layer expands a
+        // numeric mask's decimal section to fit every digit of the underlying
+        // value, so `1.2345` with mask `Rp #.##` shows `Rp 1.2345` instead of
+        // `Rp 1.23`. Opt out per-column with `showAllDecimals: false` to
+        // restore the stock jspreadsheet behaviour of trimming to the mask.
+        opt.autoExpand = o.showAllDecimals !== false;
+
         return opt;
     }
 
