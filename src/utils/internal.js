@@ -299,10 +299,14 @@ const expandMaskDecimals = function (opt, value) {
     if (!decimals) return;
 
     if (opt.mask) {
+        // Honor the column's `decimal` option so locales that use `,` for the
+        // decimal separator (e.g. Indonesian `Rp #.##0,00`) extend the right
+        // section instead of mangling the thousands group.
+        const sep = (opt.options && opt.options.decimal) || '.';
         const sections = opt.mask.split(';');
         for (let i = 0; i < sections.length; i++) {
             const section = sections[i];
-            const dotPos = section.lastIndexOf('.');
+            const dotPos = section.lastIndexOf(sep);
             if (dotPos === -1) continue;
             const tail = section.substring(dotPos + 1).match(/^([0#]+)/);
             if (!tail) continue;

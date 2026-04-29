@@ -51,4 +51,9 @@ describe('Krisna fork: showAllDecimals defaults to true for masked numeric colum
         const instance = buildInstance([['1.2345']], [{ type: 'numeric', mask: '0.00', showAllDecimals: true }]);
         expect(instance[0].getCell('A1').textContent).to.eq('1.2345');
     });
+
+    it('honors decimal: "," for masks that use comma as the decimal separator (e.g. Indonesian Rupiah)', () => {
+        const instance = buildInstance([['100000.12345']], [{ type: 'numeric', mask: 'Rp #.##0,00', decimal: ',' }]);
+        expect(instance[0].getCell('A1').textContent).to.eq('Rp 100.000,12345');
+    });
 });
